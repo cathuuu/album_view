@@ -17,7 +17,12 @@ export const fetchAllItems = async (): Promise<StorageItem[]> => {
     const idToItem = new Map<string, StorageItem>();
     for (const item of baseItems) idToItem.set(item.id, item);
     for (const item of cachedItems) idToItem.set(item.id, item);
-    return Array.from(idToItem.values());
+    const mergedItems = Array.from(idToItem.values());
+
+    // Persist the merged snapshot so it survives reloads
+    saveItemsToCache(mergedItems);
+
+    return mergedItems;
 };
 
 /**

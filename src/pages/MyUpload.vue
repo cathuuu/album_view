@@ -39,13 +39,33 @@ const loadData = async () => {
 };
 
 const handleUpload = async (event: FileUploadSelectEvent) => {
-    if (!event.files || event.files.length === 0) return;
-    const file = event.files[0];
+    const files = event.files || [];
+    if (files.length === 0) return;
+
     try {
-        toast.add({ severity: 'info', summary: 'Đang tải lên', detail: `Đang xử lý tệp ${file.name}...`, life: 5000 });
-        const newItem = await uploadNewItem(file);
-        allItems.value.unshift(newItem);
-        toast.add({ severity: 'success', summary: 'Thành công', detail: `Tải lên tệp ${newItem.name} hoàn tất!`, life: 3000 });
+        toast.add({ severity: 'info', summary: 'Đang tải lên', detail: `Đang xử lý ${files.length} tệp...`, life: 4000 });
+
+        const createdItems = await Promise.all(
+            files.map(async (file) => {
+                try {
+                    return await uploadNewItem(file);
+                } catch (e) {
+                    console.error('Lỗi tải lên tệp:', file.name, e);
+                    return null;
+                }
+            })
+        );
+
+        const successfulItems = createdItems.filter((it): it is StorageItem => !!it);
+        if (successfulItems.length > 0) {
+            allItems.value = [...successfulItems, ...allItems.value];
+            toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã tải lên ${successfulItems.length}/${files.length} tệp!`, life: 3000 });
+        }
+
+        const failedCount = files.length - successfulItems.length;
+        if (failedCount > 0) {
+            toast.add({ severity: 'warn', summary: 'Một số tệp thất bại', detail: `${failedCount} tệp không thể tải lên.`, life: 5000 });
+        }
     } catch (error) {
         console.error('Lỗi tải lên:', error);
         toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tải lên tệp.', life: 3000 });
@@ -106,13 +126,14 @@ onMounted(loadData);
             <Button label="Tạo Thư Mục" icon="pi pi-folder-open" @click="createFolderVisible = true" />
             <FileUpload
                 mode="basic"
-                name="demo[]"
+                name="files[]"
                 url="/api/upload"
                 :maxFileSize="100000000"
-                @select="handleUpload"
+                multiple
                 :auto="false"
-                customUpload
-                chooseLabel="Tải Lên Tệp Tin"
+                :customUpload="true"
+                @select="handleUpload"
+                chooseLabel="Chọn Tệp"
                 icon="pi pi-upload"
             />
         </div>
