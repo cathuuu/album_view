@@ -3,12 +3,13 @@ import { ref, onMounted, computed } from 'vue';
 import Dialog from 'primevue/dialog';
 import Image from 'primevue/image';
 import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
 import FileUpload, { type FileUploadSelectEvent } from 'primevue/fileupload';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import FolderView from '../components/FolderView.vue';
 import { getItemIcon, formatSize } from '../utils/itemUtils';
-import { fetchAllItems, toggleFavorite, moveToTrash, uploadNewItem } from '../services/Item';
+import { fetchAllItems, toggleFavorite, moveToTrash, uploadNewItem, createNewAlbum } from '../services/Item';
 import type { StorageItem } from '../types/StorageItem';
 import { useRouter } from 'vue-router';
 
@@ -17,6 +18,8 @@ const router = useRouter();
 const isLoading = ref<boolean>(true);
 const allItems = ref<StorageItem[]>([]);
 const previewVisible = ref<boolean>(false);
+const createFolderVisible = ref<boolean>(false);
+const newFolderName = ref<string>('');
 const currentItem = ref<StorageItem | null>(null);
 
 const displayItems = computed<StorageItem[]>(() => {
@@ -46,6 +49,21 @@ const handleUpload = async (event: FileUploadSelectEvent) => {
     } catch (error) {
         console.error('Lỗi tải lên:', error);
         toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tải lên tệp.', life: 3000 });
+    }
+};
+
+const handleCreateFolder = async () => {
+    if (!newFolderName.value.trim()) return;
+    const name = newFolderName.value.trim();
+    try {
+        toast.add({ severity: 'info', summary: 'Đang xử lý', detail: `Đang tạo thư mục "${name}"...`, life: 3000 });
+        const newAlbum = await createNewAlbum(name, false);
+        allItems.value.unshift(newAlbum);
+        toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã tạo thư mục "${newAlbum.name}"!`, life: 3000 });
+        createFolderVisible.value = false;
+        newFolderName.value = '';
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tạo thư mục.', life: 3000 });
     }
 };
 
@@ -84,7 +102,8 @@ onMounted(loadData);
     <div class="p-6">
         <h1 class="text-3xl font-bold mb-4 text-gray-800">Ảnh & Tệp Đã Tải Lên</h1>
 
-        <div class="flex justify-end mb-4 p-3 border-b border-gray-200">
+        <div class="flex justify-between items-center mb-4 p-3 border-b border-gray-200">
+            <Button label="Tạo Thư Mục" icon="pi pi-folder-open" @click="createFolderVisible = true" />
             <FileUpload
                 mode="basic"
                 name="demo[]"
@@ -174,5 +193,28 @@ onMounted(loadData);
                 </div>
             </div>
         </div>
+    </Dialog>
+
+    <Dialog 
+        v-model:visible="createFolderVisible" 
+        header="Tạo Thư Mục Mới" 
+        :modal="true" 
+        class="w-full md:w-3/12"
+    >
+        <div class="p-fluid">
+            <div class="field">
+                <label for="folderName" class="font-semibold mb-2 block">Tên Thư Mục</label>
+                <InputText 
+                    id="folderName" 
+                    v-model="newFolderName" 
+                    placeholder="Nhập tên thư mục" 
+                    @keyup.enter="handleCreateFolder"
+                />
+            </div>
+        </div>
+        <template #footer>
+            <Button label="Hủy" icon="pi pi-times" text @click="createFolderVisible = false" />
+            <Button label="Tạo" icon="pi pi-check" :disabled="!newFolderName.trim()" @click="handleCreateFolder" />
+        </template>
     </Dialog>
 </template>
