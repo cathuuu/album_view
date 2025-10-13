@@ -160,11 +160,18 @@ const onBreadcrumbItemClick = (item: BreadcrumbItem, index: number) => {
     </div>
 
     <div v-if="showBreadcrumb && breadcrumbItems && breadcrumbItems.length" class="mb-3">
-      <Breadcrumb :model="breadcrumbItems.map(b => ({ label: b.label }))">
+      <Breadcrumb>
         <template #item="slotProps">
-          <a href="#" class="text-sm" @click.prevent="onBreadcrumbItemClick(breadcrumbItems[slotProps.index], slotProps.index)">
-            {{ slotProps.item.label }}
-          </a>
+          <template v-for="(item, idx) in breadcrumbItems" :key="item.id || item.label">
+            <a
+              v-if="slotProps.item.label === item.label"
+              href="#"
+              class="text-sm"
+              @click.prevent="onBreadcrumbItemClick(item, idx)"
+            >
+              {{ slotProps.item.label }}
+            </a>
+          </template>
         </template>
       </Breadcrumb>
     </div>
@@ -200,7 +207,7 @@ const onBreadcrumbItemClick = (item: BreadcrumbItem, index: number) => {
 
         <template #list="slotProps">
           <FileItemDisplay 
-            :item="slotProps.data" 
+            :item="slotProps.items" 
             layout="list"
             @item-click="(it) => $emit('item-click', it)"
             @favorite-toggle="(id, fav) => $emit('favorite-toggle', id, fav)"
@@ -210,7 +217,7 @@ const onBreadcrumbItemClick = (item: BreadcrumbItem, index: number) => {
 
         <template #grid="slotProps">
           <FileItemDisplay 
-            :item="slotProps.data" 
+            :item="slotProps.items" 
             layout="grid"
             @item-click="(it) => $emit('item-click', it)"
             @favorite-toggle="(id, fav) => $emit('favorite-toggle', id, fav)"

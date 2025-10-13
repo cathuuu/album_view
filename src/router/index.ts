@@ -32,7 +32,12 @@ const routes = [
       // 4. Thùng Rác (Trash)
       { path: 'trash', name: 'Trash', component: Trash },
 
-      // 5. Quản lý Album (Được chia nhỏ)
+      {
+    path: '/album/:id',
+    name: 'AlbumDetail',
+    component: () => import('../components/AlbumDetail.vue'), // View mới
+    props: true
+  },
   
     ]
   }
