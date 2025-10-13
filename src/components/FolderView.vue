@@ -200,7 +200,7 @@ const onBreadcrumbItemClick = (item: BreadcrumbItem, index: number) => {
 
         <template #list="slotProps">
           <FileItemDisplay 
-            :item="slotProps.items" 
+            :item="slotProps.data" 
             layout="list"
             @item-click="(it) => $emit('item-click', it)"
             @favorite-toggle="(id, fav) => $emit('favorite-toggle', id, fav)"
@@ -210,7 +210,7 @@ const onBreadcrumbItemClick = (item: BreadcrumbItem, index: number) => {
 
         <template #grid="slotProps">
           <FileItemDisplay 
-            :item="slotProps.items" 
+            :item="slotProps.data" 
             layout="grid"
             @item-click="(it) => $emit('item-click', it)"
             @favorite-toggle="(id, fav) => $emit('favorite-toggle', id, fav)"

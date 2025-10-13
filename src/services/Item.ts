@@ -1,7 +1,7 @@
 // src/services/ItemService.ts
 
 import { fileData } from '../graphql/FakeData';
-import type { StorageItem } from '../types/StorageItem'; // Import kiểu dữ liệu
+import type { StorageItem } from '../types/StorageItem';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -10,8 +10,14 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  */
 export const fetchAllItems = async (): Promise<StorageItem[]> => {
     await delay(100);
-    // Ép kiểu dữ liệu để đảm bảo khớp với StorageItem[]
-    return fileData.data.getUserItems as StorageItem[]; 
+    const baseItems = (fileData.data.getUserItems || []) as StorageItem[];
+    const cachedItems = getItemsFromCache() || [];
+
+    // Merge by id, cached overrides base
+    const idToItem = new Map<string, StorageItem>();
+    for (const item of baseItems) idToItem.set(item.id, item);
+    for (const item of cachedItems) idToItem.set(item.id, item);
+    return Array.from(idToItem.values());
 };
 
 /**
@@ -19,7 +25,20 @@ export const fetchAllItems = async (): Promise<StorageItem[]> => {
  */
 export const toggleFavorite = async (itemId: string, isFavorite: boolean) => {
     await delay(50);
-    console.log(`[API MOCK] Cập nhật yêu thích cho ID ${itemId} thành ${isFavorite}`);
+
+    const cachedItems = getItemsFromCache() || [];
+    const existingIndex = cachedItems.findIndex((it) => it.id === itemId);
+    if (existingIndex >= 0) {
+        cachedItems[existingIndex] = { ...cachedItems[existingIndex], isFavorite };
+    } else {
+        const baseItems = (fileData.data.getUserItems || []) as StorageItem[];
+        const original = baseItems.find((it) => it.id === itemId);
+        if (original) {
+            cachedItems.unshift({ ...original, isFavorite });
+        }
+    }
+    saveItemsToCache(cachedItems);
+
     return { success: true, itemId, isFavorite };
 };
 
@@ -28,7 +47,20 @@ export const toggleFavorite = async (itemId: string, isFavorite: boolean) => {
  */
 export const moveToTrash = async (itemId: string) => {
     await delay(50);
-    console.log(`[API MOCK] Chuyển ID ${itemId} vào Thùng rác`);
+
+    const cachedItems = getItemsFromCache() || [];
+    const existingIndex = cachedItems.findIndex((it) => it.id === itemId);
+    if (existingIndex >= 0) {
+        cachedItems[existingIndex] = { ...cachedItems[existingIndex], isDeleted: true };
+    } else {
+        const baseItems = (fileData.data.getUserItems || []) as StorageItem[];
+        const original = baseItems.find((it) => it.id === itemId);
+        if (original) {
+            cachedItems.unshift({ ...original, isDeleted: true });
+        }
+    }
+    saveItemsToCache(cachedItems);
+
     return { success: true, itemId };
 };
 
@@ -59,12 +91,14 @@ export const uploadNewItem = async (file: File): Promise<StorageItem> => {
         isPublic: false,
         uri: itemType === 'image' ? 'https://via.placeholder.com/300' : '' 
     };
-    
-    return newItem;
+    // persist to cache
+    const currentItems = getItemsFromCache() || [];
+    currentItems.unshift(newItem);
+    saveItemsToCache(currentItems);
 
-    
+    return newItem;
 };
-export const createNewAlbum = async (albumName: string): Promise<StorageItem> => {
+export const createNewAlbum = async (albumName: string, isPublic: boolean = false): Promise<StorageItem> => {
     await delay(100); 
 
     const newId = 'album-' + Date.now().toString(36);
@@ -78,7 +112,7 @@ export const createNewAlbum = async (albumName: string): Promise<StorageItem> =>
         isFavorite: false,
         isDeleted: false,
         isAlbum: true, // Đánh dấu là album
-        isPublic: false, // Mặc định là riêng tư
+        isPublic, // true cho public, false cho private
         uri: ''
     };
 

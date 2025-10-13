@@ -42,7 +42,7 @@ const handleCreateFolder = async () => {
     try {
         const albumName = newFolderName.value.trim();
         toast.add({ severity: 'info', summary: 'Đang xử lý', detail: `Đang tạo thư mục "${albumName}"...`, life: 3000 });
-        const newAlbum = await createNewAlbum(albumName);
+        const newAlbum = await createNewAlbum(albumName, false);
         allItems.value.unshift(newAlbum);
         toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã tạo thư mục "${newAlbum.name}"!`, life: 3000 });
         createFolderVisible.value = false;
