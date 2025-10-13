@@ -1,30 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import DataView from 'primevue/dataview';
-import DataViewLayoutOptionsComp from 'primevue/dataviewlayoutoptions';
-import Dialog from 'primevue/dialog'; 
-import Image from 'primevue/image';   
-import Button from 'primevue/button'; 
-import FileUpload, { type FileUploadSelectEvent } from 'primevue/fileupload'; 
-import Toast from 'primevue/toast'; 
+import Dialog from 'primevue/dialog';
+import Image from 'primevue/image';
+import Button from 'primevue/button';
+import FileUpload, { type FileUploadSelectEvent } from 'primevue/fileupload';
+import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import FileItemDisplay from '../components/FileItemDisplay.vue'; 
-import { getItemIcon, formatSize } from '../utils/itemUtils'; 
+import FolderView from '../components/FolderView.vue';
+import { getItemIcon, formatSize } from '../utils/itemUtils';
 import { fetchAllItems, toggleFavorite, moveToTrash, uploadNewItem } from '../services/Item';
-import type { StorageItem } from '../types/StorageItem'; 
-import { useRouter } from 'vue-router'; 
-
-// 💡 ĐỊNH NGHĨA KIỂU CHO DATAVIEW SLOT PROPS
-interface DataViewItemSlotProps {
-    data: StorageItem;
-    index: number;
-}
+import type { StorageItem } from '../types/StorageItem';
+import { useRouter } from 'vue-router';
 
 const toast = useToast();
 const router = useRouter();
 const isLoading = ref<boolean>(true);
-const allItems = ref<StorageItem[]>([]); 
-const layout = ref<'grid' | 'list'>('list'); 
+const allItems = ref<StorageItem[]>([]);
 const previewVisible = ref<boolean>(false);
 const currentItem = ref<StorageItem | null>(null);
 
@@ -37,7 +28,7 @@ const loadData = async () => {
     try {
         allItems.value = await fetchAllItems();
     } catch (error) {
-        console.error("Lỗi khi tải dữ liệu:", error);
+        console.error('Lỗi khi tải dữ liệu:', error);
         allItems.value = [];
     } finally {
         isLoading.value = false;
@@ -46,16 +37,14 @@ const loadData = async () => {
 
 const handleUpload = async (event: FileUploadSelectEvent) => {
     if (!event.files || event.files.length === 0) return;
-
     const file = event.files[0];
-    
     try {
         toast.add({ severity: 'info', summary: 'Đang tải lên', detail: `Đang xử lý tệp ${file.name}...`, life: 5000 });
         const newItem = await uploadNewItem(file);
-        allItems.value.unshift(newItem); 
+        allItems.value.unshift(newItem);
         toast.add({ severity: 'success', summary: 'Thành công', detail: `Tải lên tệp ${newItem.name} hoàn tất!`, life: 3000 });
     } catch (error) {
-        console.error("Lỗi tải lên:", error);
+        console.error('Lỗi tải lên:', error);
         toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tải lên tệp.', life: 3000 });
     }
 };
@@ -78,7 +67,7 @@ const handleFavoriteToggle = async (itemId: string, isFavorite: boolean) => {
 };
 
 const handleDeleteItem = async (itemId: string) => {
-    if (confirm("Bạn có chắc chắn muốn chuyển mục này vào Thùng rác?")) {
+    if (confirm('Bạn có chắc chắn muốn chuyển mục này vào Thùng rác?')) {
         const response = await moveToTrash(itemId);
         if (response.success) {
             const itemToUpdate = allItems.value.find(item => item.id === itemId);
@@ -94,77 +83,40 @@ onMounted(loadData);
     <Toast />
     <div class="p-6">
         <h1 class="text-3xl font-bold mb-4 text-gray-800">Ảnh & Tệp Đã Tải Lên</h1>
-        
-        <div class="flex justify-between items-center mb-4 p-3 border-b border-gray-200">
-            <DataViewLayoutOptionsComp v-model:layout="layout" class="order-2 md:order-1" />
-            <FileUpload 
-                mode="basic" 
-                name="demo[]" 
-                url="/api/upload" 
-                :maxFileSize="100000000" 
-                @select="handleUpload" 
+
+        <div class="flex justify-end mb-4 p-3 border-b border-gray-200">
+            <FileUpload
+                mode="basic"
+                name="demo[]"
+                url="/api/upload"
+                :maxFileSize="100000000"
+                @select="handleUpload"
                 :auto="false"
-                customUpload 
+                customUpload
                 chooseLabel="Tải Lên Tệp Tin"
                 icon="pi pi-upload"
-                class="order-1 md:order-2"
             />
         </div>
 
-        <div v-if="isLoading" class="text-center p-10 text-xl text-blue-500">
-            <i class="pi pi-spin pi-spinner text-3xl mr-2"></i> Đang tải dữ liệu...
-        </div>
-
-        <div v-else>
-            <div class="mb-4 text-sm text-gray-600">
-                Hiển thị {{ displayItems.length }} mục.
-            </div>
-            
-            <DataView 
-                :value="displayItems" 
-                :layout="layout" 
-                :paginator="true" 
-                :rows="16"
-                dataKey="id" >
-                
-                <template #header v-if="layout === 'list'">
-                    <div class="grid grid-cols-12 font-semibold text-gray-600 p-3 bg-gray-50 border-y border-gray-300 rounded-t-lg">
-                        <div class="col-span-6">Tên Mục</div>
-                        <div class="col-span-2 text-right">Kích Thước</div>
-                        <div class="col-span-3 text-right">Ngày Tải Lên</div>
-                        <div class="col-span-1"></div>
-                    </div>
-                </template>
-                
-                <template #list="slotProps">
-                    <div v-if="slotProps.items" class="cursor-pointer"> 
-                       <FileItemDisplay 
-                            :item="slotProps.items" 
-                            layout="list"
-                            @item-click="handleItemClick"
-                            @favorite-toggle="handleFavoriteToggle"
-                            @delete-item="handleDeleteItem"
-                        /> 
-                    </div>
-                </template>
-                
-                <template #grid="slotProps">
-                    <div v-if="slotProps.items">
-                       <FileItemDisplay 
-                            :item="slotProps.items" 
-                            layout="grid"
-                            @item-click="handleItemClick"
-                            @favorite-toggle="handleFavoriteToggle"
-                            @delete-item="handleDeleteItem"
-                        />
-                    </div>
-                </template>
-
-                <template #empty>
-                    <div class="text-center p-5 text-gray-500">Không tìm thấy mục nào. Hãy thử tải lên một tệp mới!</div>
-                </template>
-            </DataView>
-        </div>
+        <FolderView
+            :items="displayItems"
+            :isLoading="isLoading"
+            :rows="16"
+            :showBreadcrumb="false"
+            emptyMessage="Không tìm thấy mục nào. Hãy thử tải lên một tệp mới!"
+            @item-click="handleItemClick"
+            @favorite-toggle="handleFavoriteToggle"
+            @delete-item="handleDeleteItem"
+        >
+            <template #list-header>
+                <div class="grid grid-cols-12 font-semibold text-gray-600 p-3 bg-gray-50 border-y border-gray-300 rounded-t-lg">
+                    <div class="col-span-6">Tên Mục</div>
+                    <div class="col-span-2 text-right">Kích Thước</div>
+                    <div class="col-span-3 text-right">Ngày Tải Lên</div>
+                    <div class="col-span-1"></div>
+                </div>
+            </template>
+        </FolderView>
     </div>
     
     <Dialog 
