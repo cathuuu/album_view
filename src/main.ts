@@ -7,6 +7,7 @@ import 'primevue/resources/themes/saga-blue/theme.css'
 import 'primevue/resources/primevue.min.css'
 import 'primeicons/primeicons.css'
 import ToastService from 'primevue/toastservice'; 
+import Tooltip from 'primevue/tooltip' //
 
 import { apolloClient } from './apollo'
 import { DefaultApolloClient } from '@vue/apollo-composable'
@@ -24,5 +25,5 @@ app.use(pinia)
 app.use(ToastService); 
 app.use(router)
 app.use(PrimeVue)
-
+app.directive('tooltip', Tooltip)
 app.mount('#app')

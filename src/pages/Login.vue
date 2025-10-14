@@ -5,7 +5,7 @@
             <small>cái này chỉ là test vì album cần dùng user id và name nên tạo tạm biến ảo bằng cái này </small>
             <div class="field">
                 <label for="id">id user</label>
-                <input id="id" v-model="form.id" type="number" required placeholder="nhập id người dùng" />
+                <input id="id" v-model="form.id" type="text" required placeholder="nhập id người dùng" />
             </div>
 
             <div class="field">

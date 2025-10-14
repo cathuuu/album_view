@@ -1,241 +1,231 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import Toast from 'primevue/toast';
 import Dialog from 'primevue/dialog';
 import Image from 'primevue/image';
 import Button from 'primevue/button';
-import InputText from 'primevue/inputtext';
 import FileUpload, { type FileUploadSelectEvent } from 'primevue/fileupload';
-import Toast from 'primevue/toast';
-import { useToast } from 'primevue/usetoast';
-import FolderView from '../components/FolderView.vue';
-import { getItemIcon, formatSize } from '../utils/itemUtils';
-import { fetchAllItems, toggleFavorite, moveToTrash, uploadNewItem, createNewAlbum } from '../services/Item';
+import { fetchAllItems, uploadNewItem, toggleFavorite, moveToTrash } from '../services/Item';
 import type { StorageItem } from '../types/StorageItem';
-import { useRouter } from 'vue-router';
 
-const toast = useToast();
-const router = useRouter();
+
+// state
 const isLoading = ref<boolean>(true);
-const allItems = ref<StorageItem[]>([]);
+const items = ref<StorageItem[]>([]);
 const previewVisible = ref<boolean>(false);
-const createFolderVisible = ref<boolean>(false);
-const newFolderName = ref<string>('');
 const currentItem = ref<StorageItem | null>(null);
 
-const displayItems = computed<StorageItem[]>(() => {
-    return allItems.value.filter(item => !item.isDeleted);
-});
-
-const loadData = async () => {
+// load data
+const loadItems = async () => {
     isLoading.value = true;
     try {
-        allItems.value = await fetchAllItems();
-    } catch (error) {
-        console.error('Lỗi khi tải dữ liệu:', error);
-        allItems.value = [];
+        items.value = await fetchAllItems();
+    } catch (err) {
+        console.error(err);
+        toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải danh sách tệp.' });
     } finally {
         isLoading.value = false;
     }
 };
 
+// upload
+const toast = useToast();
+
 const handleUpload = async (event: FileUploadSelectEvent) => {
-    const files = event.files || [];
-    if (files.length === 0) return;
+  const files = event.files || [];
+  if (!files.length) return;
 
+  toast.add({
+    severity: 'info',
+    summary: 'Đang tải lên...',
+    detail: `Đang xử lý ${files.length} tệp...`,
+    life: 2500,
+  });
+
+  const uploaded: StorageItem[] = [];
+
+  for (const file of files) {
     try {
-        toast.add({ severity: 'info', summary: 'Đang tải lên', detail: `Đang xử lý ${files.length} tệp...`, life: 4000 });
-
-        const createdItems = await Promise.all(
-            files.map(async (file) => {
-                try {
-                    return await uploadNewItem(file);
-                } catch (e) {
-                    console.error('Lỗi tải lên tệp:', file.name, e);
-                    return null;
-                }
-            })
-        );
-
-        const successfulItems = createdItems.filter((it): it is StorageItem => !!it);
-        if (successfulItems.length > 0) {
-            allItems.value = [...successfulItems, ...allItems.value];
-            toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã tải lên ${successfulItems.length}/${files.length} tệp!`, life: 3000 });
-        }
-
-        const failedCount = files.length - successfulItems.length;
-        if (failedCount > 0) {
-            toast.add({ severity: 'warn', summary: 'Một số tệp thất bại', detail: `${failedCount} tệp không thể tải lên.`, life: 5000 });
-        }
-    } catch (error) {
-        console.error('Lỗi tải lên:', error);
-        toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tải lên tệp.', life: 3000 });
-    }
-};
-
-const handleCreateFolder = async () => {
-    if (!newFolderName.value.trim()) return;
-    const name = newFolderName.value.trim();
-    try {
-        toast.add({ severity: 'info', summary: 'Đang xử lý', detail: `Đang tạo thư mục "${name}"...`, life: 3000 });
-        const newAlbum = await createNewAlbum(name, false);
-        allItems.value.unshift(newAlbum);
-        toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã tạo thư mục "${newAlbum.name}"!`, life: 3000 });
-        createFolderVisible.value = false;
-        newFolderName.value = '';
+      const res = await uploadNewItem(file);
+      if (res) {
+        uploaded.push(res);
+        console.log('✅ Upload thành công:', res.filename);
+      } else {
+        console.warn('⚠️ Không nhận được dữ liệu trả về cho file:', file.name);
+      }
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Không thể tạo thư mục.', life: 3000 });
+      console.error('❌ Upload thất bại:', file.name, e);
+      toast.add({
+        severity: 'error',
+        summary: 'Lỗi tải lên',
+        detail: `Không thể tải tệp ${file.name}`,
+        life: 3000,
+      });
+    }
+  }
+
+  if (uploaded.length > 0) {
+    toast.add({
+      severity: 'success',
+      summary: 'Hoàn tất',
+      detail: `Đã tải lên ${uploaded.length} / ${files.length} tệp thành công!`,
+      life: 3000,
+    });
+
+    await loadItems(); // ✅ load lại danh sách mới nhất
+  } else {
+    toast.add({
+      severity: 'warn',
+      summary: 'Thất bại',
+      detail: 'Không có tệp nào được tải lên.',
+      life: 3000,
+    });
+  }
+};
+
+// yêu thích
+const handleFavoriteToggle = async (item: StorageItem) => {
+    const newStatus = !item.isFavorite;
+    const result = await toggleFavorite(item.id, newStatus);
+    if (result.success) {
+        item.isFavorite = newStatus;
     }
 };
 
-const handleItemClick = (item: StorageItem) => {
-    if (item.isAlbum) {
-        router.push({ name: 'AlbumDetail', params: { id: item.id } });
-    } else {
-        currentItem.value = item;
-        previewVisible.value = true;
+// xoá mềm
+const handleDelete = async (item: StorageItem) => {
+    if (!confirm(`Bạn có chắc muốn xoá "${item.filename}"?`)) return;
+    const result = await moveToTrash(item.id);
+    if (result.success) {
+        items.value = items.value.filter(it => it.id !== item.id);
+        toast.add({ severity: 'success', summary: 'Đã xoá', detail: 'Tệp đã được chuyển vào thùng rác.', life: 2000 });
     }
 };
 
-const handleFavoriteToggle = async (itemId: string, isFavorite: boolean) => {
-    const response = await toggleFavorite(itemId, isFavorite);
-    if (response.success) {
-        const itemToUpdate = allItems.value.find(item => item.id === itemId);
-        if (itemToUpdate) itemToUpdate.isFavorite = isFavorite;
-    }
+// xem chi tiết
+const openPreview = (item: StorageItem) => {
+    currentItem.value = item;
+    previewVisible.value = true;
 };
 
-const handleDeleteItem = async (itemId: string) => {
-    if (confirm('Bạn có chắc chắn muốn chuyển mục này vào Thùng rác?')) {
-        const response = await moveToTrash(itemId);
-        if (response.success) {
-            const itemToUpdate = allItems.value.find(item => item.id === itemId);
-            if (itemToUpdate) itemToUpdate.isDeleted = true;
-        }
-    }
-};
-
-onMounted(loadData);
+onMounted(loadItems);
 </script>
 
 <template>
     <Toast />
-    <div class="p-6">
-        <h1 class="text-3xl font-bold mb-4 text-gray-800">Ảnh & Tệp Đã Tải Lên</h1>
 
-        <div class="flex justify-between items-center mb-4 p-3 border-b border-gray-200">
-            <Button label="Tạo Thư Mục" icon="pi pi-folder-open" @click="createFolderVisible = true" />
+    <div class="p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-3xl font-bold text-gray-800">Thư viện của tôi</h2>
+
             <FileUpload
                 mode="basic"
                 name="files[]"
-                url="/api/upload"
-                :maxFileSize="100000000"
-                multiple
-                :auto="false"
                 :customUpload="true"
-                @select="handleUpload"
-                chooseLabel="Chọn Tệp"
+                :auto="false"
+                chooseLabel="Tải lên"
                 icon="pi pi-upload"
+                :maxFileSize="100000000"
+                @select="handleUpload"
+                class="p-button-rounded p-button-success"
             />
         </div>
 
-        <FolderView
-            :items="displayItems"
-            :isLoading="isLoading"
-            :rows="16"
-            :showBreadcrumb="false"
-            emptyMessage="Không tìm thấy mục nào. Hãy thử tải lên một tệp mới!"
-            @item-click="handleItemClick"
-            @favorite-toggle="handleFavoriteToggle"
-            @delete-item="handleDeleteItem"
-        >
-            <template #list-header>
-                <div class="grid grid-cols-12 font-semibold text-gray-600 p-3 bg-gray-50 border-y border-gray-300 rounded-t-lg">
-                    <div class="col-span-6">Tên Mục</div>
-                    <div class="col-span-2 text-right">Kích Thước</div>
-                    <div class="col-span-3 text-right">Ngày Tải Lên</div>
-                    <div class="col-span-1"></div>
-                </div>
-            </template>
-        </FolderView>
-    </div>
-    
-    <Dialog 
-        v-model:visible="previewVisible" 
-        :header="currentItem?.name || 'Xem trước Tệp'" 
-        :modal="true" 
-        :draggable="false" 
-        :style="{ width: '80vw' }"
-        :contentStyle="{ padding: '0' }"
-        headerClass="border-b"
-    >
-        <template #footer>
-            <Button label="Đóng" @click="previewVisible = false" icon="pi pi-times" severity="secondary" />
-        </template>
-        
-        <div v-if="currentItem" class="grid grid-cols-1 md:grid-cols-3 h-full">
-            <div class="md:col-span-2 flex items-center justify-center p-4 bg-gray-100 min-h-[500px]">
-                <div v-if="currentItem.type === 'image'">
-                    <Image 
-                        :src="currentItem.uri || 'https://via.placeholder.com/600x400?text=Image+Not+Available'" 
-                        :alt="currentItem.name" 
-                        preview 
-                        class="block max-h-[70vh] w-auto"
-                        imageClass="rounded"
+        <!-- trạng thái loading -->
+        <div v-if="isLoading" class="flex justify-center items-center py-20 text-gray-500">
+            <i class="pi pi-spin pi-spinner text-2xl mr-2"></i> Đang tải dữ liệu...
+        </div>
+
+        <!-- danh sách dạng lưới -->
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div
+                v-for="item in items"
+                :key="item.id"
+                class="group relative border rounded-xl overflow-hidden shadow hover:shadow-xl transition"
+            >
+                <div class="relative">
+                    <!-- hiển thị ảnh -->
+                    <img
+                        v-if="item.type === 'photo' && item.url"
+                        :src="item.url"
+                        :alt="item.filename"
+                        class="object-cover w-full h-48 cursor-pointer"
+                        @click="openPreview(item)"
                     />
-                </div>
-                <div v-else class="text-center p-10">
-                    <i :class="[getItemIcon(currentItem.type, currentItem.isAlbum), 'text-8xl text-gray-500 mb-4']"></i>
-                    <p class="text-lg font-semibold">Không có xem trước trực tiếp</p>
-                    <p class="text-sm text-gray-500">Loại tệp: {{ currentItem.type }}. Kích thước: {{ formatSize(currentItem.size) }}.</p>
-                </div>
-            </div>
+                    <!-- file khác -->
+                    <div
+                        v-else
+                        class="flex flex-col justify-center items-center w-full h-48 bg-gray-100 cursor-pointer"
+                        @click="openPreview(item)"
+                    >
+                        <i class="pi pi-file text-5xl text-gray-400 mb-2"></i>
+                        <p class="text-gray-600 text-sm truncate px-2">{{ item.filename }}</p>
+                    </div>
 
-            <div class="md:col-span-1 p-5 border-l">
-                <h3 class="text-xl font-bold mb-4 border-b pb-2">Chi tiết Tệp</h3>
-                
-                <div class="mb-4">
-                    <p class="text-sm font-semibold text-gray-600">Tên Tệp</p>
-                    <p class="text-base break-words">{{ currentItem.name }}</p>
-                </div>
-                
-                <div class="mb-4">
-                    <p class="text-sm font-semibold text-gray-600">Ngày Tải Lên</p>
-                    <p class="text-base">{{ currentItem.uploadedDate }}</p>
+                    <!-- action overlay -->
+                    <div
+                        class="absolute top-0 right-0 flex flex-col opacity-0 group-hover:opacity-100 transition bg-black/40 p-2 rounded-bl-lg"
+                    >
+                        <Button
+                            icon="pi pi-heart"
+                            text
+                            size="small"
+                            :class="item.isFavorite ? 'text-red-400' : 'text-white'"
+                            @click.stop="handleFavoriteToggle(item)"
+                            v-tooltip.bottom="'Yêu thích'"
+                        />
+                        <Button
+                            icon="pi pi-trash"
+                            text
+                            size="small"
+                            class="text-white"
+                            @click.stop="handleDelete(item)"
+                            v-tooltip.bottom="'Xoá'"
+                        />
+                    </div>
                 </div>
 
-                <div class="mb-4">
-                    <p class="text-sm font-semibold text-gray-600">Kích Thước</p>
-                    <p class="text-base">{{ formatSize(currentItem.size) }}</p>
-                </div>
-
-                <div class="mb-4 flex items-center">
-                    <i :class="['text-lg mr-2', currentItem.isFavorite ? 'pi pi-heart-fill text-red-500' : 'pi pi-heart']"></i>
-                    <span :class="{'text-red-500': currentItem.isFavorite}">{{ currentItem.isFavorite ? 'Đã Yêu Thích' : 'Chưa Yêu Thích' }}</span>
+                <!-- footer -->
+                <div class="p-2 text-center bg-white">
+                    <p class="text-sm font-semibold truncate">{{ item.filename }}</p>
                 </div>
             </div>
         </div>
-    </Dialog>
 
-    <Dialog 
-        v-model:visible="createFolderVisible" 
-        header="Tạo Thư Mục Mới" 
-        :modal="true" 
-        class="w-full md:w-3/12"
+        <!-- rỗng -->
+        <div v-if="!isLoading && items.length === 0" class="text-center text-gray-500 mt-10">
+            <p>Chưa có tệp nào. Hãy thử tải lên!</p>
+        </div>
+    </div>
+
+    <!-- Dialog xem ảnh -->
+    <Dialog
+        v-model:visible="previewVisible"
+        :header="currentItem?.filename"
+        modal
+        :style="{ width: '80vw' }"
     >
-        <div class="p-fluid">
-            <div class="field">
-                <label for="folderName" class="font-semibold mb-2 block">Tên Thư Mục</label>
-                <InputText 
-                    id="folderName" 
-                    v-model="newFolderName" 
-                    placeholder="Nhập tên thư mục" 
-                    @keyup.enter="handleCreateFolder"
-                />
+        <div class="flex justify-center items-center p-4">
+            <Image
+                v-if="currentItem?.type === 'photo'"
+                :src="currentItem.url"
+                :alt="currentItem.filename"
+                preview
+                class="max-h-[70vh] rounded shadow-lg"
+            />
+            <div v-else class="text-center text-gray-600">
+                <i class="pi pi-file text-6xl mb-3"></i>
+                <p class="text-lg font-medium">Không có xem trước trực tiếp</p>
+                <p class="text-sm">{{ currentItem?.filename }}</p>
             </div>
         </div>
-        <template #footer>
-            <Button label="Hủy" icon="pi pi-times" text @click="createFolderVisible = false" />
-            <Button label="Tạo" icon="pi pi-check" :disabled="!newFolderName.trim()" @click="handleCreateFolder" />
-        </template>
     </Dialog>
 </template>
+
+<style scoped>
+.p-fileupload .p-button {
+    background-color: #4caf50;
+    border: none;
+}
+</style>
