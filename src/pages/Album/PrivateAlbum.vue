@@ -1,54 +1,61 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useToast } from 'primevue/usetoast';
+
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import Button from 'primevue/button';
 import Toast from 'primevue/toast';
-import { useToast } from 'primevue/usetoast';
-import { useRouter } from 'vue-router';
+
 import FolderGrid from '../../components/FolderGrid.vue';
 import { createNewAlbum, fetchAllItems } from '../../services/Item';
-import type { StorageItem } from '../../types/StorageItem';
+import type { StorageItem, ItemType } from '../../types/StorageItem';
 
-// ========================
-// State & Composables
-// ========================
-const toast = useToast();
+// =========================
+// ⚙️ Setup
+// =========================
 const router = useRouter();
+const toast = useToast();
 
-const isLoading = ref(true);
+// =========================
+// 📦 State
+// =========================
 const allItems = ref<StorageItem[]>([]);
+const filteredItems = ref<StorageItem[]>([]);
+const isLoading = ref(true);
+
 const createFolderVisible = ref(false);
 const newFolderName = ref('');
-
-// ========================
-// Computed
-// ========================
-const privateItems = computed(() =>
-  allItems.value.filter(item => !item.isPublic && !item.isDeleted)
-);
-
-const filteredItems = ref<StorageItem[]>([]);
 const searchQuery = ref('');
 const sortOption = ref<'name' | 'date' | 'size'>('name');
+const currentFolderId = ref<string | null>(null); // hỗ trợ xem folder con trong tương lai
 
-// ========================
-// Lifecycle
-// ========================
+// =========================
+// 🧮 Computed
+// =========================
+const privateItems = computed(() =>
+  allItems.value.filter(item => !item.isDeleted && !item.isShared)
+);
+
+// =========================
+// 🚀 Lifecycle
+// =========================
 onMounted(async () => {
   await loadData();
 });
 
-// ========================
-// Methods
-// ========================
+// =========================
+// 🔄 Methods
+// =========================
 const loadData = async () => {
   isLoading.value = true;
   try {
-    allItems.value = await fetchAllItems();
+    const data = await fetchAllItems();
+    allItems.value = data;
     filteredItems.value = [...privateItems.value];
-  } catch (error) {
-    console.error('Lỗi khi tải dữ liệu:', error);
+  } catch (err) {
+    console.error('❌ Lỗi tải dữ liệu:', err);
     allItems.value = [];
   } finally {
     isLoading.value = false;
@@ -56,75 +63,90 @@ const loadData = async () => {
 };
 
 const handleSearch = () => {
-  const q = searchQuery.value.trim().toLowerCase();
+  const query = searchQuery.value.trim().toLowerCase();
   filteredItems.value = privateItems.value.filter(item =>
-    item.name.toLowerCase().includes(q)
+    item.name?.toLowerCase().includes(query)
   );
 };
 
 const handleSortChange = () => {
   filteredItems.value.sort((a, b) => {
     if (sortOption.value === 'name') return a.name.localeCompare(b.name);
-    if (sortOption.value === 'date')
-      return new Date(b.uploadedDate).getTime() - new Date(a.uploadedDate).getTime();
-    if (sortOption.value === 'size') return b.size - a.size;
+    if (sortOption.value === 'date') {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    }
+    if (sortOption.value === 'size') return (b.size ?? 0) - (a.size ?? 0);
     return 0;
   });
 };
 
 const handleCreateFolder = async () => {
-  if (!newFolderName.value.trim()) {
+  const name = newFolderName.value.trim();
+  if (!name) {
     toast.add({
       severity: 'warn',
-      summary: 'Cảnh báo',
-      detail: 'Tên thư mục không được để trống.',
-      life: 3000
+      summary: 'Tên thư mục trống',
+      detail: 'Vui lòng nhập tên thư mục trước khi tạo.',
+      life: 3000,
     });
     return;
   }
 
   try {
-    const albumName = newFolderName.value.trim();
     toast.add({
       severity: 'info',
       summary: 'Đang xử lý',
-      detail: `Đang tạo thư mục "${albumName}"...`,
-      life: 2000
+      detail: `Tạo thư mục "${name}"...`,
+      life: 2000,
     });
 
-    const newAlbum = await createNewAlbum(albumName, false);
-    allItems.value.unshift(newAlbum);
-    filteredItems.value.unshift(newAlbum);
+const newAlbum = await createNewAlbum(name, false  );
+
+    const newFolder: StorageItem = {
+      id: newAlbum.id,
+      name: newAlbum.name,
+      type: 'folder' as ItemType,
+      isDeleted: false,
+      isShared: newAlbum.isShared ?? false,
+      createdAt: newAlbum.createdAt,
+      updatedAt: newAlbum.updatedAt ?? newAlbum.createdAt,
+      path: newAlbum.path ?? '',
+    };
+
+    allItems.value.unshift(newFolder);
+    filteredItems.value.unshift(newFolder);
 
     toast.add({
       severity: 'success',
       summary: 'Thành công',
-      detail: `Đã tạo thư mục "${newAlbum.name}"!`,
-      life: 3000
+      detail: `Đã tạo thư mục "${newAlbum.name}"`,
+      life: 3000,
     });
 
     createFolderVisible.value = false;
     newFolderName.value = '';
-  } catch (error) {
-    console.error('Lỗi tạo thư mục:', error);
+  } catch (err) {
+    console.error('❌ Lỗi tạo thư mục:', err);
     toast.add({
       severity: 'error',
       summary: 'Thất bại',
-      detail: 'Không thể tạo thư mục.',
-      life: 3000
+      detail: 'Không thể tạo thư mục. Vui lòng thử lại.',
+      life: 3000,
     });
   }
 };
 
 const handleItemClick = (item: StorageItem) => {
-  if (item.isAlbum) {
+  if (item.type === 'folder') {
     router.push({ name: 'AlbumDetail', params: { id: item.id } });
   } else {
     toast.add({
       severity: 'info',
       summary: 'Xem tệp',
-      detail: `Mở xem: ${item.name}`,
-      life: 2000
+      detail: `Mở tệp: ${item.name}`,
+      life: 2000,
     });
   }
 };
@@ -133,7 +155,7 @@ const handleItemClick = (item: StorageItem) => {
 <template>
   <Toast />
 
-  <!-- Header Toolbar -->
+  <!-- Toolbar -->
   <div
     class="flex flex-col md:flex-row items-center justify-between gap-3 p-5 bg-[#1c1d20] text-gray-100 border-b border-[#2a2b2f]"
   >
@@ -148,6 +170,7 @@ const handleItemClick = (item: StorageItem) => {
     </div>
 
     <div class="flex flex-wrap gap-3 items-center">
+      <!-- Search -->
       <span class="p-input-icon-left">
         <i class="pi pi-search text-gray-400"></i>
         <InputText
@@ -158,23 +181,25 @@ const handleItemClick = (item: StorageItem) => {
         />
       </span>
 
+      <!-- Sort -->
       <select
         v-model="sortOption"
         @change="handleSortChange"
         class="bg-[#2a2b2f] text-gray-200 rounded-md px-3 py-2 outline-none border border-[#3a3b3f] hover:border-gray-400"
       >
         <option value="name">Tên (A → Z)</option>
-        <option value="date">Ngày tải lên</option>
+        <option value="date">Ngày tạo</option>
         <option value="size">Kích thước</option>
       </select>
     </div>
   </div>
 
-  <!-- Grid View -->
+  <!-- Folder Grid -->
   <FolderGrid
     :items="filteredItems"
     :isLoading="isLoading"
     @item-click="handleItemClick"
+    class="animate-fade-in"
   />
 
   <!-- Create Folder Dialog -->
@@ -207,122 +232,19 @@ const handleItemClick = (item: StorageItem) => {
     </template>
   </Dialog>
 </template>
+
 <style scoped>
-/* ===========================
-   Layout & Toolbar
-=========================== */
-div.bg-\[\#1c1d20\] {
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease;
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
-/* ===========================
-   Search Input
-=========================== */
-.p-inputtext {
-  padding: 0.6rem 1rem;
-  border-radius: 8px;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.p-inputtext:focus {
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
-  background-color: #2f3033;
-}
-
-/* ===========================
-   Select dropdown
-=========================== */
-select {
-  transition: all 0.2s ease;
-}
-select:hover {
-  background-color: #35363b;
-}
-
-/* ===========================
-   Buttons
-=========================== */
-.p-button {
-  border-radius: 8px !important;
-  font-weight: 500;
-  transition: background-color 0.25s ease, transform 0.2s ease;
-}
-.p-button:hover {
-  transform: translateY(-1px);
-}
-
-/* ===========================
-   FolderGrid cards (imported)
-=========================== */
-.folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1.2rem;
-  padding: 1.5rem;
-  background-color: #121315;
-  min-height: 80vh;
-}
-
-.folder-card {
-  background: linear-gradient(145deg, #1d1e22, #232427);
-  border: 1px solid #2e2f34;
-  border-radius: 14px;
-  padding: 1rem;
-  transition: all 0.25s ease;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #e5e7eb;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
-}
-.folder-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45);
-  border-color: #4f46e5;
-}
-
-/* ===========================
-   Folder icon & name
-=========================== */
-.folder-icon {
-  font-size: 2.5rem;
-  color: #60a5fa;
-  margin-bottom: 0.6rem;
-}
-
-.folder-name {
-  font-size: 0.95rem;
-  text-align: center;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ===========================
-   Empty state
-=========================== */
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: #9ca3af;
-  font-size: 1rem;
-}
-
-/* ===========================
-   Dialog
-=========================== */
-.p-dialog .p-dialog-header {
-  background-color: #1c1d20;
-  color: #e5e7eb;
-}
-.p-dialog .p-dialog-content {
-  background-color: #1c1d20;
-}
-.p-dialog .p-dialog-footer {
-  background-color: #1c1d20;
+.animate-fade-in {
+  animation: fade-in 0.3s ease-in-out;
 }
 </style>

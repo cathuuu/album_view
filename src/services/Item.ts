@@ -1,85 +1,175 @@
-// src/services/ItemService.ts
-import axios from "axios";
-import type { StorageItem } from "../types/StorageItem";
+import { GraphQLClient, gql } from 'graphql-request';
+import type { StorageItem } from '../types/StorageItem';
 
-const BASE_URL = "http://localhost:8080/api/v1/media";
-const FIXED_USER_ID = "68ea31f9b545a702d865f1d2"; // 👈 tạm thời để cứng
+const BASE_URL = 'http://localhost:8080';
+const GRAPHQL_ENDPOINT = 'http://localhost:8080/graphql';
+const UPLOAD_ENDPOINT = 'http://localhost:8080/api/v1/media/upload';
 
-// 🧩 Lấy danh sách media của user
-export const fetchUserMedia = async (userId: string = FIXED_USER_ID): Promise<StorageItem[]> => {
-  try {
-    const res = await axios.get(`${BASE_URL}/${userId}`);
-    console.log("📸 Media fetched:", res.data);
-    return res.data || [];
-  } catch (error) {
-    console.error("❌ Lỗi khi tải danh sách media:", error);
-    return [];
+const client = new GraphQLClient(GRAPHQL_ENDPOINT);
+
+// ======================================================
+// 📦 1️⃣ LẤY DANH SÁCH FOLDER + MEDIA (rootItems)
+// ======================================================
+export const fetchAllItems = async (userId: string | null = null): Promise<StorageItem[]> => {
+const query = gql`
+query RootItems($userId: ID!) {
+  rootItems(userId: $userId) {
+    __typename
+    ... on FolderDocument {
+      id
+      name
+      path
+      isShared
+      createdAt
+      updatedAt
+    }
+    ... on MediaDocument {
+      id
+      url
+      mimeType
+      size
+      likeCount
+      createdAt
+      updatedAt
+    }
   }
+}
+`;
+  const TEST_USER_ID = '68f1ab012f488200046911e4';
+  const variables = { 
+    userId: userId ?? TEST_USER_ID // Lấy từ tham số, nếu null thì dùng TEST_USER_ID
+  };
+  const { rootItems } = await client.request(query, variables);
+
+  // Chuẩn hóa dữ liệu từ GraphQL về StorageItem
+  return rootItems.map((item: any) => {
+    if (item.__typename === 'FolderDocument') {
+      return {
+        id: item.id,
+        name: item.name,
+        type: 'folder',
+        isDeleted: item.isDeleted ?? false,
+        isShared: item.isShared ?? false,
+        coverUrl: item.coverUrl ?? undefined,
+        path: item.path ?? '',
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      } as StorageItem;
+    }
+
+    // MediaDocument
+    return {
+      id: item.id,
+      name: item.filename ?? 'unknown',
+      type: 'media',
+      isDeleted: item.isDeleted ?? false,
+      size: item.size ?? 0,
+      mimeType: item.mimeType ?? '',
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      coverUrl: item.url
+  ? item.url.startsWith('http')
+    ? item.url
+    : `${BASE_URL}${item.url}`
+  : undefined,
+      photoMeta: item.photoMeta
+        ? {
+            width: item.photoMeta.width,
+            height: item.photoMeta.height,
+            cameraModel: item.photoMeta.cameraModel,
+            iso: item.photoMeta.iso,
+            aperture: item.photoMeta.aperture,
+          }
+        : undefined,
+      videoMeta: item.videoMeta
+        ? {
+            duration: item.videoMeta.duration,
+            resolution: item.videoMeta.resolution,
+            frameRate: item.videoMeta.frameRate,
+          }
+        : undefined,
+    } as StorageItem;
+  });
 };
 
-// 🧩 Lấy tất cả media (nếu cần)
-export const fetchAllItems = async (): Promise<StorageItem[]> => {
-  try {
-    const res = await axios.get(`${BASE_URL}/all`);
-    return res.data || [];
-  } catch (err) {
-    console.error("❌ Lỗi khi tải danh sách media:", err);
-    throw err;
-  }
-};
-
-// 🧩 Upload file
-export const uploadNewItem = async (file: File): Promise<StorageItem | null> => {
+// ======================================================
+// ☁️ 2️⃣ UPLOAD MEDIA (REST API)
+// ======================================================
+export const uploadNewItem = async (file: File): Promise<StorageItem> => {
+  const TEST_USER_ID = '68f1ab012f488200046911e4';
   const formData = new FormData();
-  formData.append("file", file);
-  formData.append("userId", FIXED_USER_ID);
+  formData.append('file', file);
+  formData.append('userId', TEST_USER_ID);
 
-  try {
-    const res = await axios.post(`${BASE_URL}/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+  const response = await fetch(UPLOAD_ENDPOINT, {
+    method: 'POST',
+    body: formData,
+  });
 
-    console.log("✅ Upload response:", res.data);
-    return res.data as StorageItem;
-  } catch (error: any) {
-    console.error("❌ Upload failed:", error.response?.data || error.message);
-    return null;
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Upload failed: ${err}`);
   }
+
+  const data = await response.json();
+
+  // Chuẩn hóa phản hồi upload thành StorageItem
+  return {
+    id: data.id ?? crypto.randomUUID(),
+    name: data.filename ?? file.name,
+    type: 'media',
+    isDeleted: false,
+    mimeType: data.mimeType ?? file.type,
+    size: data.size ?? file.size,
+coverUrl: data.url
+  ? data.url.startsWith('http')
+    ? data.url
+    : `${BASE_URL}${data.url}`
+  : undefined,
+    createdAt: data.createdAt ?? new Date().toISOString(),
+    updatedAt: data.updatedAt ?? new Date().toISOString(),
+  } as StorageItem;
 };
 
-// 🧩 Tạo album mới
-export const createNewAlbum = async (name: string, isPrivate: boolean): Promise<StorageItem> => {
-  try {
-    const res = await axios.post(`${BASE_URL}/album`, null, {
-      params: { name, private: isPrivate },
-    });
-    return res.data;
-  } catch (err) {
-    console.error("❌ Không thể tạo album:", err);
-    throw err;
-  }
-};
+// ======================================================
+// 📁 3️⃣ TẠO ALBUM MỚI (GraphQL Mutation)
+// ======================================================
+export const createNewAlbum = async (name: string, isShared = false): Promise<StorageItem> => {
+  const mutation = gql`
+    mutation CreateFolder($input: FolderInput!) {
+      createFolder(input: $input) {
+        id
+        name
+        path
+        isShared
+        isDeleted
+        createdAt
+        updatedAt
+      }
+    }
+  `;
 
-// 🧩 Chuyển vào thùng rác
-export const moveToTrash = async (itemId: string) => {
-  try {
-    const res = await axios.patch(`${BASE_URL}/trash/${itemId}`);
-    return res.data;
-  } catch (err) {
-    console.error("❌ Lỗi xoá tệp:", err);
-    throw err;
-  }
-};
+  const variables = {
+    input: {
+      name,
+      ownerId: '68f1ab012f488200046911e4', // TODO: Lấy từ Auth Store
+      parentId: null,
+      isShared,
+      path: '',
+    },
+  };
 
-// 🧩 Đánh dấu yêu thích / bỏ yêu thích
-export const toggleFavorite = async (itemId: string, isFavorite: boolean) => {
-  try {
-    const res = await axios.patch(`${BASE_URL}/favorite/${itemId}`, null, {
-      params: { favorite: isFavorite },
-    });
-    return res.data;
-  } catch (err) {
-    console.error("❌ Lỗi toggle favorite:", err);
-    throw err;
-  }
+  const { createFolder } = await client.request(mutation, variables);
+
+  return {
+    id: createFolder.id,
+    name: createFolder.name,
+    type: 'folder',
+    isDeleted: createFolder.isDeleted ?? false,
+    isShared: createFolder.isShared ?? false,
+    coverUrl: undefined,
+    path: createFolder.path,
+    createdAt: createFolder.createdAt,
+    updatedAt: createFolder.updatedAt,
+  } as StorageItem;
 };

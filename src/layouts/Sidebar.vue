@@ -3,7 +3,7 @@
     
     <router-link :to="{ name: 'MyUpload' }" custom v-slot="{ href, navigate, isActive }">
         <Button 
-          label="Tải Lên Của Tôi" 
+          label="My Uploads" 
           icon="pi pi-cloud-upload" 
           :class="['menu-btn', { 'active-route': isActive }]" 
           :href="href"
@@ -23,7 +23,7 @@
     
     <router-link :to="{ name: 'PublicAlbum' }" custom v-slot="{ href, navigate, isActive }">
         <Button 
-          label="Albums Public" 
+          label="Albums Community" 
           icon="pi pi-folder-open" 
           :class="['menu-btn', { 'active-route': isActive }]" 
           :href="href"
