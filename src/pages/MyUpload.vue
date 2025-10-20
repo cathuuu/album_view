@@ -90,7 +90,7 @@
       >
         <!-- PREVIEW -->
         <div
-          class=" aspect-square w-full overflow-hidden bg-gray-50 relative flex items-center justify-center"
+          class="priview aspect-square w-full overflow-hidden bg-gray-50 relative flex items-center justify-center"
           :class="{ 'aspect-auto h-32 flex-shrink-0': isListView }"
         >
           <template v-if="item.type === 'media'">
@@ -318,5 +318,8 @@ onMounted(loadItems);
 .ss{
     display: flex ;
     flex-wrap: wrap ;
+}
+.priview{
+  margin-bottom: 181px;
 }
 </style>

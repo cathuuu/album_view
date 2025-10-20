@@ -155,6 +155,7 @@ const handleItemClick = (item: StorageItem) => {
 <template>
   <Toast />
 
+  <div class="">
   <!-- Toolbar -->
   <div
     class="flex flex-col md:flex-row items-center justify-between gap-3 p-5 bg-[#1c1d20] text-gray-100 border-b border-[#2a2b2f]"
@@ -194,14 +195,15 @@ const handleItemClick = (item: StorageItem) => {
     </div>
   </div>
 
-  <!-- Folder Grid -->
-  <FolderGrid
+<div class="folder-grid">
+<FolderGrid
     :items="filteredItems"
     :isLoading="isLoading"
     @item-click="handleItemClick"
     class="animate-fade-in"
   />
-
+  </div>
+  </div>
   <!-- Create Folder Dialog -->
   <Dialog
     v-model:visible="createFolderVisible"
@@ -246,5 +248,12 @@ const handleItemClick = (item: StorageItem) => {
 }
 .animate-fade-in {
   animation: fade-in 0.3s ease-in-out;
+}
+.folder-grid {
+  padding: 30px;
+  background-color: #ebebeb;
+  display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
 }
 </style>
